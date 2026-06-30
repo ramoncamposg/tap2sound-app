@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- La app aplica los colores reales con Compose (Tap2SoundTheme).
+         Aqui basta un tema base valido sin barra de accion. -->
+    <style name="Theme.Tap2Sound" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

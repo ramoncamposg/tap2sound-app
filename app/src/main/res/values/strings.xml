@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tap2Sound</string>
+    <string name="login_title">Inicia Sesión</string>
+    <string name="register_title">Crear Cuenta</string>
+    <string name="email">Email</string>
+    <string name="password">Contraseña</string>
+    <string name="login">Iniciar Sesión</string>
+    <string name="register">Registrarse</string>
+    <string name="dont_have_account">¿No tienes cuenta? Registrate</string>
+    <string name="already_have_account">¿Ya tienes cuenta? Inicia Sesión</string>
+    <string name="my_speakers">Mis Altavoces</string>
+    <string name="tap_nfc">Toca un NFC para conectar</string>
+    <string name="connecting">Conectando...</string>
+    <string name="connected">Conectado</string>
+    <string name="error">Error</string>
+    <string name="logout">Cerrar Sesión</string>
+    <string name="loading">Cargando...</string>
+    <string name="no_speakers">No hay altavoces vinculados</string>
+    <string name="speaker_name">Nombre del Altavoz</string>
+    <string name="rename">Renombrar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="save">Guardar</string>
+</resources>
