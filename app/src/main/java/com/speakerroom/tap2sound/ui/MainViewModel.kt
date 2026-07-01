@@ -294,7 +294,7 @@ class MainViewModel(
                     // musica y mostrar Connected. La app se mantiene en primer
                     // plano unos segundos (foreground dispatch capta taps sin BAL)
                     // y se minimiza tras ese margen si no hay más actividad.
-                    kotlinx.coroutines.delay(800)
+                    delay(800)
                     btManager.resumePlayback()
                     _connectedMac.value = cachedMac
                     _tapState.value = TapState.Connected("Speaker connected")

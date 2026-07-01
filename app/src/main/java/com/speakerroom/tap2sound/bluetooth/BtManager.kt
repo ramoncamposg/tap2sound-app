@@ -18,7 +18,7 @@ import kotlin.coroutines.resume
  * Gestiona la captura de la MAC del altavoz Bluetooth conectado y la
  * conexion/reconexion via el perfil A2DP (reflexion).
  *
- * El proxy A2DP se abre UNA SOLA VEZ (al construir esta clase, ver [init]) y
+ * El proxy A2DP se abre UNA SOLA VEZ (al construir esta clase, en el bloque init) y
  * se mantiene vivo durante toda la vida del objeto, reconectandose solo si el
  * propio sistema lo desconecta. Antes cada llamada abria y cerraba su propio
  * proxy, lo que anadia un round-trip de bind/unbind del servicio A2DP en cada
