@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.nfc.NfcAdapter
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.speakerroom.tap2sound.ui.TapState
-import kotlinx.coroutines.delay
 import com.speakerroom.tap2sound.nfc.NfcHelper
 import com.speakerroom.tap2sound.ui.AuthScreen
 import com.speakerroom.tap2sound.ui.OnboardingScreen
@@ -56,6 +56,12 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { /* el usuario decide; el flujo se valida en tiempo de uso */ }
 
+    // Intent NFC pendiente de procesar. NO se procesa en onCreate/onNewIntent
+    // (en Android 15 la Activity puede no estar plenamente activa ahí, con
+    // "Background activity launch blocked"), sino en onResume, cuando la
+    // Activity ya está estable. El UID no se pierde: el ViewModel lo encola.
+    private var pendingNfcIntent: Intent? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -68,19 +74,27 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Procesar intent NFC si la app se lanzó al tocar un tag
-        handleNfcIntent(intent)
+        // Si la app se lanzó al tocar un tag, guardamos el intent y lo
+        // procesamos en onResume (no aquí).
+        pendingNfcIntent = intent
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleNfcIntent(intent)
+        // Se procesará en el onResume que sigue a onNewIntent.
+        pendingNfcIntent = intent
     }
 
     override fun onResume() {
         super.onResume()
         NfcHelper.enableForegroundDispatch(this, nfcAdapter)
+        // Procesar aquí el intent NFC pendiente, con la Activity ya activa.
+        pendingNfcIntent?.let { nfcIntent ->
+            pendingNfcIntent = null
+            Log.d("T2S_DEBUG", "onResume: processing pending NFC intent action=${nfcIntent.action}")
+            handleNfcIntent(nfcIntent)
+        }
     }
 
     override fun onPause() {
@@ -136,10 +150,10 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
     val tapState by viewModel.tapState.collectAsState()
     val userEmail by viewModel.userEmail.collectAsState()
 
-    // Tras un tap ya emparejado: mostrar unos segundos y minimizar (como antes).
+    // El ViewModel decide CUÁNDO minimizar (temporizador reseteable). Aquí solo
+    // ejecutamos la minimización cuando lo emite.
     LaunchedEffect(Unit) {
         viewModel.minimizeEvent.collect {
-            delay(1200)
             onMinimize()
         }
     }
@@ -151,6 +165,7 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
     val writeMode by viewModel.writeMode.collectAsState()
     val writeState by viewModel.writeState.collectAsState()
     val tagsWritten by viewModel.tagsWritten.collectAsState()
+    val connectedMac by viewModel.connectedMac.collectAsState()
 
     when (authState) {
         is AuthState.Loading,
@@ -193,6 +208,7 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
                         speakers = speakers,
                         tapState = tapState,
                         isAdmin = isAdmin,
+                        connectedMac = connectedMac,
                         onAddSpeaker = viewModel::startOnboarding,
                         onOpenAdmin = viewModel::showAdminScreen,
                         onConfirmSpeaker = viewModel::confirmSpeaker,

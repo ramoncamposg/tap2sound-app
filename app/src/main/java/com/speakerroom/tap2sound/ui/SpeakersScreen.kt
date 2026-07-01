@@ -1,5 +1,6 @@
 package com.speakerroom.tap2sound.ui
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ fun SpeakersScreen(
     speakers: List<Speaker>,
     tapState: TapState,
     isAdmin: Boolean,
+    connectedMac: String?,
     onAddSpeaker: () -> Unit,
     onOpenAdmin: () -> Unit,
     onConfirmSpeaker: () -> Unit,
@@ -107,7 +109,11 @@ fun SpeakersScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(speakers) { speaker ->
-                        SpeakerCard(speaker)
+                        SpeakerCard(
+                            speaker = speaker,
+                            isConnected = connectedMac != null &&
+                                speaker.btMac.equals(connectedMac, ignoreCase = true)
+                        )
                     }
                 }
             }
@@ -190,14 +196,48 @@ private fun TapStatusBanner(
 }
 
 @Composable
-private fun SpeakerCard(speaker: Speaker) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun SpeakerCard(speaker: Speaker, isConnected: Boolean) {
+    val cardColors = if (isConnected) {
+        CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    } else {
+        CardDefaults.cardColors()
+    }
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .then(
+            if (isConnected) {
+                Modifier.border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    shape = MaterialTheme.shapes.medium
+                )
+            } else {
+                Modifier
+            }
+        )
+    Card(modifier = cardModifier, colors = cardColors) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = speaker.name ?: "Speaker",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = speaker.name ?: "Speaker",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                if (isConnected) {
+                    Text(
+                        text = "🔊 Conectado",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "MAC: ${speaker.btMac}",

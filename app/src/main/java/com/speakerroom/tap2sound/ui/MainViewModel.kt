@@ -1,6 +1,7 @@
 package com.speakerroom.tap2sound.ui
 
 import android.nfc.Tag
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.speakerroom.tap2sound.audio.AudioVerifier
@@ -9,6 +10,8 @@ import com.speakerroom.tap2sound.data.Speaker
 import com.speakerroom.tap2sound.data.Tap2SoundRepository
 import com.speakerroom.tap2sound.nfc.NfcHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -74,6 +77,11 @@ class MainViewModel(
     private val _btConnected = MutableStateFlow<Boolean?>(null)
     val btConnected: StateFlow<Boolean?> = _btConnected.asStateFlow()
 
+    // MAC del altavoz actualmente conectado (el que suena). Se usa para
+    // resaltarlo en la lista. null = ninguno conectado por la app todavía.
+    private val _connectedMac = MutableStateFlow<String?>(null)
+    val connectedMac: StateFlow<String?> = _connectedMac.asStateFlow()
+
     // ---- Admin ----
     // Pantalla de admin visible
     private val _adminScreenVisible = MutableStateFlow(false)
@@ -99,6 +107,27 @@ class MainViewModel(
     // UID de un tap recibido antes de que la sesión esté confirmada.
     private var pendingTapUid: String? = null
 
+    // La app está "lista" cuando hay sesión iniciada Y la sincronización inicial
+    // de altavoces ha terminado (caché UID->MAC disponible). Hasta entonces, un
+    // tap NFC no se procesa: se guarda como pendiente y se reprocesa solo cuando
+    // se alcanza este estado. Así una única lectura basta aunque el tag llegue
+    // durante el arranque.
+    @Volatile
+    private var appReady = false
+
+    // Temporizador para minimizar la app tras conectar. Se mantiene la app en
+    // primer plano unos segundos (así el foreground dispatch de NFC capta cada
+    // tag al instante, sin el bloqueo BAL de Android 15). Cada nuevo tap resetea
+    // el temporizador; solo se minimiza tras unos segundos sin actividad.
+    private var minimizeJob: Job? = null
+    private val minimizeDelayMs = 6000L
+
+    // Si es false, la app NUNCA se auto-minimiza tras conectar (solución fiable
+    // al doble tap con Android 15: al quedarse en primer plano, el foreground
+    // dispatch capta cada NFC sin el bloqueo BAL). Ponlo a true para recuperar
+    // el comportamiento de auto-minimizar tras [minimizeDelayMs] ms.
+    private val autoMinimizeEnabled = false
+
     // Datos a la espera de confirmación de altavoz (verificación por sonido).
     private var verifyUid: String? = null
     private var verifyMac: String? = null
@@ -122,6 +151,8 @@ class MainViewModel(
             _authState.value = if (repository.isLoggedIn()) {
                 // Sincronizar en segundo plano al iniciar sesión
                 repository.syncSpeakers()
+                appReady = true
+                Log.d("T2S_DEBUG", "checkLoginStatus: session ready (sync done), appReady=true")
                 AuthState.LoggedIn.also { processPendingTapIfAny() }
             } else {
                 AuthState.LoggedOut
@@ -135,15 +166,38 @@ class MainViewModel(
      * para procesarlo en cuanto el usuario inicie sesión.
      */
     fun onNfcTagScanned(nfcUid: String) {
-        if (_authState.value is AuthState.LoggedIn) {
-            handleNfcTap(nfcUid)
-        } else {
-            pendingTapUid = nfcUid
+        // Guardar SIEMPRE el UID como operación pendiente y no perderlo.
+        // Si la app ya está lista se procesa de inmediato; si no, quedará
+        // pendiente y se reprocesará en cuanto login + sync + caché estén listos.
+        Log.d("T2S_DEBUG", "onNfcTagScanned: uid=$nfcUid appReady=$appReady authState=${_authState.value}")
+        pendingTapUid = nfcUid
+        processPendingTapIfAny()
+    }
+
+    /**
+     * Programa la minimización de la app tras [minimizeDelayMs] ms. Cada llamada
+     * reinicia el temporizador; así, mientras haya taps seguidos, la app sigue en
+     * primer plano y el foreground dispatch capta cada uno sin BAL de Android 15.
+     */
+    private fun scheduleMinimize() {
+        minimizeJob?.cancel()
+        minimizeJob = viewModelScope.launch {
+            delay(minimizeDelayMs)
+            _minimizeEvent.tryEmit(Unit)
         }
     }
 
     private fun processPendingTapIfAny() {
-        val pending = pendingTapUid ?: return
+        // Todavía no está lista la sesión/caché: se reintentará al estarlo.
+        if (!appReady) {
+            Log.d("T2S_DEBUG", "processPendingTapIfAny: appReady=false, keeping pending=$pendingTapUid")
+            return
+        }
+        val pending = pendingTapUid ?: run {
+            Log.d("T2S_DEBUG", "processPendingTapIfAny: no pending tap")
+            return
+        }
+        Log.d("T2S_DEBUG", "processPendingTapIfAny: processing queued uid=$pending")
         pendingTapUid = null
         handleNfcTap(pending)
     }
@@ -154,6 +208,7 @@ class MainViewModel(
             _authState.value = AuthState.Loading
             repository.register(email, password)
                 .onSuccess {
+                    appReady = true
                     _authState.value = AuthState.LoggedIn
                     if (pendingTapUid != null) {
                         processPendingTapIfAny()
@@ -176,6 +231,7 @@ class MainViewModel(
             repository.login(email, password)
                 .onSuccess {
                     repository.syncSpeakers()
+                    appReady = true
                     _authState.value = AuthState.LoggedIn
                     if (pendingTapUid != null) {
                         processPendingTapIfAny()
@@ -194,6 +250,10 @@ class MainViewModel(
     fun logout() {
         viewModelScope.launch {
             repository.logout()
+            appReady = false
+            pendingTapUid = null
+            minimizeJob?.cancel()
+            _connectedMac.value = null
             _adminScreenVisible.value = false
             _writeMode.value = false
             _onboardingActive.value = false
@@ -210,22 +270,41 @@ class MainViewModel(
      *    en el backend, y conectar.
      */
     fun handleNfcTap(nfcUid: String) {
+        // Un nuevo tap cancela cualquier minimizado pendiente: la app se queda
+        // en primer plano para captar el siguiente tag sin BAL.
+        minimizeJob?.cancel()
         viewModelScope.launch {
             _tapState.value = TapState.Processing
 
             // 1. ¿Ya conocemos este altavoz localmente? (uso diario)
-            val cachedMac = repository.getCachedMacByUid(nfcUid)
+            // Si la caché aún no tiene el UID (p. ej. justo tras arrancar, antes
+            // de que termine el primer sync), reintentamos una vez tras sincronizar
+            // para no tratar por error un altavoz ya emparejado como si fuera nuevo.
+            var cachedMac = repository.getCachedMacByUid(nfcUid)
+            Log.d("T2S_DEBUG", "handleNfcTap: uid=$nfcUid cachedMac(1st)=$cachedMac")
+            if (cachedMac == null) {
+                repository.syncSpeakers()
+                cachedMac = repository.getCachedMacByUid(nfcUid)
+                Log.d("T2S_DEBUG", "handleNfcTap: after resync cachedMac=$cachedMac")
+            }
             if (cachedMac != null) {
                 val connected = btManager.connectToSpeaker(cachedMac)
                 if (connected) {
                     // Breve espera para que se asiente la ruta A2DP, reanudar la
-                    // musica y luego mostrar Connected y minimizar.
+                    // musica y mostrar Connected. La app se mantiene en primer
+                    // plano unos segundos (foreground dispatch capta taps sin BAL)
+                    // y se minimiza tras ese margen si no hay más actividad.
                     kotlinx.coroutines.delay(800)
                     btManager.resumePlayback()
+                    _connectedMac.value = cachedMac
                     _tapState.value = TapState.Connected("Speaker connected")
                     _onboardingActive.value = false
-                    kotlinx.coroutines.delay(400)
-                    _minimizeEvent.tryEmit(Unit)
+                    // NO auto-minimizamos: si la app se va a segundo plano, el
+                    // siguiente tap NFC choca con el bloqueo BAL de Android 15 y
+                    // exige un segundo toque. Quedándonos en primer plano, el
+                    // foreground dispatch capta cada tag al instante (un solo toque).
+                    // Para volver a la música, el usuario pulsa Inicio.
+                    if (autoMinimizeEnabled) scheduleMinimize()
                 } else {
                     _tapState.value = TapState.Error("Couldn't connect to the speaker")
                 }
@@ -277,6 +356,7 @@ class MainViewModel(
             _tapState.value = TapState.Processing
             repository.autoPair(uid, mac, verifyName)
                 .onSuccess { speaker ->
+                    _connectedMac.value = mac
                     _tapState.value = TapState.Connected(speaker.name ?: "Speaker")
                     _onboardingActive.value = false
                 }
@@ -419,5 +499,6 @@ class MainViewModel(
     override fun onCleared() {
         super.onCleared()
         audioVerifier.release()
+        btManager.release()
     }
 }
