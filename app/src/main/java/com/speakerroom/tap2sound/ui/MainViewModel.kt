@@ -392,6 +392,28 @@ class MainViewModel(
         _tapState.value = TapState.Idle
     }
 
+    /**
+     * Conecta manualmente a un altavoz ya vinculado tocando su tarjeta en la
+     * lista (seleccion manual, sin necesidad de usar la etiqueta NFC).
+     */
+    fun connectSpeakerManually(speaker: Speaker) {
+        minimizeJob?.cancel()
+        viewModelScope.launch {
+            _tapState.value = TapState.Processing
+            val connected = btManager.connectToSpeaker(speaker.btMac)
+            if (connected) {
+                delay(800)
+                btManager.resumePlayback()
+                _connectedMac.value = speaker.btMac
+                _tapState.value = TapState.Connected(speaker.name ?: "Speaker")
+                _onboardingActive.value = false
+                if (autoMinimizeEnabled) scheduleMinimize()
+            } else {
+                _tapState.value = TapState.Error("Couldn't connect to the speaker")
+            }
+        }
+    }
+
     // ---------- ONBOARDING ----------
 
     /** Abre el onboarding manualmente (botón "Add speaker"). */
