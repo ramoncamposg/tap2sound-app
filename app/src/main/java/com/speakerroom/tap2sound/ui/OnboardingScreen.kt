@@ -10,6 +10,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import com.speakerroom.tap2sound.R
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -166,10 +175,21 @@ private fun StepTapNfc(
     onReplayVerification: () -> Unit,
     onBack: () -> Unit
 ) {
-    Text(
-        text = "📲",
-        style = MaterialTheme.typography.displayLarge
-    )
+    Box(
+                modifier = Modifier
+                    .size(96.dp)
+                                .background(color = T2SInk, shape = CircleShape)
+                                            .border(width = 2.dp, color = T2SGold, shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                                painter = painterResource(id = R.drawable.ic_tap_nfc),
+                                contentDescription = "Tap2Sound NFC icon",
+                                modifier = Modifier
+                                    .size(68.dp)
+                                                    .clip(CircleShape)
+                                                            )
+    }
     Spacer(modifier = Modifier.height(16.dp))
     Text(
         text = "Hold the phone to the speaker's NFC",
