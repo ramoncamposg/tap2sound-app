@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.speakerroom.tap2sound.audio.AudioVerifier
+import com.speakerroom.tap2sound.bluetooth.BtDevice
 import com.speakerroom.tap2sound.bluetooth.BtManager
 import com.speakerroom.tap2sound.data.Speaker
 import com.speakerroom.tap2sound.data.Tap2SoundRepository
@@ -81,6 +82,15 @@ class MainViewModel(
     // resaltarlo en la lista. null = ninguno conectado por la app todavía.
     private val _connectedMac = MutableStateFlow<String?>(null)
     val connectedMac: StateFlow<String?> = _connectedMac.asStateFlow()
+
+    // ---- Selección manual de Bluetooth (sin NFC) ----
+    // Pantalla del selector de dispositivos Bluetooth emparejados visible.
+    private val _btPickerVisible = MutableStateFlow(false)
+    val btPickerVisible: StateFlow<Boolean> = _btPickerVisible.asStateFlow()
+
+    // Lista de dispositivos BT emparejados que se muestran para elegir a mano.
+    private val _btDevices = MutableStateFlow<List<BtDevice>>(emptyList())
+    val btDevices: StateFlow<List<BtDevice>> = _btDevices.asStateFlow()
 
     // ---- Admin ----
     // Pantalla de admin visible
@@ -410,6 +420,54 @@ class MainViewModel(
                 if (autoMinimizeEnabled) scheduleMinimize()
             } else {
                 _tapState.value = TapState.Error("Couldn't connect to the speaker")
+            }
+        }
+    }
+
+    // ---------- SELECCIÓN MANUAL DE BLUETOOTH (SIN NFC) ----------
+
+    /** Abre el selector y carga los dispositivos BT emparejados del teléfono. */
+    fun showBluetoothPicker() {
+        _btPickerVisible.value = true
+        loadBluetoothDevices()
+    }
+
+    /** Cierra el selector de Bluetooth. */
+    fun hideBluetoothPicker() {
+        _btPickerVisible.value = false
+    }
+
+    /** Recarga la lista de dispositivos BT emparejados (botón de refrescar). */
+    fun loadBluetoothDevices() {
+        viewModelScope.launch {
+            _btDevices.value = btManager.getBondedDevices()
+        }
+    }
+
+    /**
+     * Conecta a un dispositivo Bluetooth elegido a mano en el selector, igual
+     * que se haría desde el menú de Bluetooth del sistema, sin necesidad de la
+     * etiqueta NFC.
+     */
+    fun connectToDeviceManually(device: BtDevice) {
+        minimizeJob?.cancel()
+        viewModelScope.launch {
+            _tapState.value = TapState.Processing
+            if (!btManager.isBluetoothEnabled()) {
+                _tapState.value = TapState.Error("Turn on Bluetooth first")
+                return@launch
+            }
+            val connected = btManager.connectToSpeaker(device.mac)
+            if (connected) {
+                delay(800)
+                btManager.resumePlayback()
+                _connectedMac.value = device.mac
+                _tapState.value = TapState.Connected(device.name)
+                _btPickerVisible.value = false
+                _onboardingActive.value = false
+                if (autoMinimizeEnabled) scheduleMinimize()
+            } else {
+                _tapState.value = TapState.Error("Couldn't connect to ${device.name}")
             }
         }
     }

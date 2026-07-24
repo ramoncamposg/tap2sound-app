@@ -35,6 +35,7 @@ import androidx.core.content.ContextCompat
 import com.speakerroom.tap2sound.ui.TapState
 import com.speakerroom.tap2sound.nfc.NfcHelper
 import com.speakerroom.tap2sound.ui.AuthScreen
+import com.speakerroom.tap2sound.ui.BluetoothPickerScreen
 import com.speakerroom.tap2sound.ui.OnboardingScreen
 import com.speakerroom.tap2sound.ui.AdminScreen
 import com.speakerroom.tap2sound.ui.AuthState
@@ -148,7 +149,6 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
     val savedEmail by viewModel.userEmail.collectAsState()
     val savedPassword by viewModel.savedPassword.collectAsState()
     val tapState by viewModel.tapState.collectAsState()
-    val userEmail by viewModel.userEmail.collectAsState()
 
     // El ViewModel decide CUÁNDO minimizar (temporizador reseteable). Aquí solo
     // ejecutamos la minimización cuando lo emite.
@@ -166,6 +166,8 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
     val writeState by viewModel.writeState.collectAsState()
     val tagsWritten by viewModel.tagsWritten.collectAsState()
     val connectedMac by viewModel.connectedMac.collectAsState()
+    val btPickerVisible by viewModel.btPickerVisible.collectAsState()
+    val btDevices by viewModel.btDevices.collectAsState()
 
     when (authState) {
         is AuthState.Loading,
@@ -181,6 +183,16 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
         }
         is AuthState.LoggedIn -> {
             when {
+                btPickerVisible -> {
+                    BluetoothPickerScreen(
+                        devices = btDevices,
+                        connectedMac = connectedMac,
+                        tapState = tapState,
+                        onSelectDevice = viewModel::connectToDeviceManually,
+                        onRefresh = viewModel::loadBluetoothDevices,
+                        onBack = viewModel::hideBluetoothPicker
+                    )
+                }
                 adminScreenVisible -> {
                     AdminScreen(
                         writeMode = writeMode,
@@ -204,13 +216,14 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
                 }
                 else -> {
                     SpeakersScreen(
-                        userEmail = userEmail,
                         speakers = speakers,
                         tapState = tapState,
                         isAdmin = isAdmin,
                         connectedMac = connectedMac,
                         onAddSpeaker = viewModel::startOnboarding,
                         onOpenAdmin = viewModel::showAdminScreen,
+                        onOpenBtPicker = viewModel::showBluetoothPicker,
+                        onConnectSpeaker = viewModel::connectSpeakerManually,
                         onConfirmSpeaker = viewModel::confirmSpeaker,
                         onRejectSpeaker = viewModel::rejectSpeaker,
                         onReplayVerification = viewModel::replayVerification,

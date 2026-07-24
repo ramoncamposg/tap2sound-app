@@ -3,6 +3,7 @@ package com.speakerroom.tap2sound.bluetooth
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager as SystemBluetoothManager
 import android.bluetooth.BluetoothProfile
@@ -13,6 +14,9 @@ import android.os.Looper
 import android.util.Log
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+
+/** Modelo ligero de un dispositivo Bluetooth emparejado (nombre visible + MAC). */
+data class BtDevice(val name: String, val mac: String)
 
 /**
  * Gestiona la captura de la MAC del altavoz Bluetooth conectado y la
@@ -194,6 +198,36 @@ class BtManager(private val context: Context) {
     }
 
     fun isBluetoothEnabled(): Boolean = adapter?.isEnabled == true
+
+    /**
+     * Lista los dispositivos Bluetooth ya emparejados con el teléfono, igual que
+     * los que aparecen en el menú de Bluetooth del sistema. Prioriza los de audio
+     * (altavoces/auriculares); si no hay ninguno de audio, devuelve todos los
+     * emparejados. Permite elegir el altavoz A MANO, sin usar la etiqueta NFC.
+     */
+    @SuppressLint("MissingPermission")
+    fun getBondedDevices(): List<BtDevice> {
+        val bt = adapter ?: return emptyList()
+        if (!bt.isEnabled) return emptyList()
+        return try {
+            val bonded = bt.bondedDevices.orEmpty()
+            val audio = bonded.filter { dev ->
+                val major = try {
+                    dev.bluetoothClass?.majorDeviceClass
+                } catch (_: Exception) {
+                    null
+                }
+                major == BluetoothClass.Device.Major.AUDIO_VIDEO ||
+                    major == BluetoothClass.Device.Major.UNCATEGORIZED
+            }
+            val list = if (audio.isNotEmpty()) audio else bonded.toList()
+            list.map { BtDevice(name = it.name ?: it.address, mac = it.address) }
+                .sortedBy { it.name.lowercase() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error listing bonded devices", e)
+            emptyList()
+        }
+    }
 
     /**
      * Envia una orden de PLAY a la app de musica activa para que la

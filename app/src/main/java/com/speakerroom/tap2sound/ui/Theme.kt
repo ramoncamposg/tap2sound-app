@@ -1,6 +1,5 @@
 package com.speakerroom.tap2sound.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -51,7 +50,10 @@ private val Tap2SoundLightColors = lightColorScheme(
 
 @Composable
 fun Tap2SoundTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    // La app SIEMPRE usa la paleta oscura/dorada de la marca (tap2sound.com),
+    // ignorando el ajuste claro/oscuro del sistema. Así nunca aparece el fondo
+    // blanco cuando el teléfono está en modo claro.
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colors = if (darkTheme) Tap2SoundDarkColors else Tap2SoundLightColors

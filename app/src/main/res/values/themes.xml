@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- La app aplica los colores reales con Compose (Tap2SoundTheme).
-         Aqui basta un tema base valido sin barra de accion. -->
-    <style name="Theme.Tap2Sound" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- La app aplica los colores reales con Compose (Tap2SoundTheme). Aqui usamos
+         una base OSCURA para que el fondo de la ventana y las barras de sistema
+         sean oscuros desde el arranque (sin flash blanco en modo claro). -->
+    <style name="Theme.Tap2Sound" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/t2s_bg</item>
+        <item name="android:colorBackground">@color/t2s_bg</item>
+        <item name="android:statusBarColor">@color/t2s_bg</item>
+        <item name="android:navigationBarColor">@color/t2s_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

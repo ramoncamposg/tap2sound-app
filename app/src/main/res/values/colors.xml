@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Colores de marca Tap2Sound (coinciden con las variables CSS de la web) -->
+    <color name="t2s_bg">#0B0B0D</color>          <!-- bg -->
+    <color name="t2s_gold">#D1A24A</color>        <!-- accent -->
+
     <color name="seed">#6750a4</color>
     <color name="md_theme_light_primary">#6750a4</color>
     <color name="md_theme_light_onPrimary">#ffffff</color>
