@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Foreground del icono adaptativo: coloca el logo circular Tap2Sound centrado
+    y a ~66% del lienzo (72dp de 108dp) para que quede dentro de la zona segura
+    y no lo recorte la máscara circular del launcher.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:gravity="center"
+        android:width="72dp"
+        android:height="72dp"
+        android:drawable="@drawable/logo_tap2sound" />
+</layer-list>

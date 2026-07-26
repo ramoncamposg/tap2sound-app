@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Foreground del icono de lanzador: reutiliza el dibujo "TAP HERE" existente
+    (ic_launcher_foreground, trazo negro sobre transparente) y lo tiñe de dorado
+    de marca para que combine con el fondo oscuro y con tap2sound.com.
+-->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@mipmap/ic_launcher_foreground"
+    android:tint="@color/t2s_gold" />
