@@ -83,6 +83,11 @@ class MainViewModel(
     private val _connectedMac = MutableStateFlow<String?>(null)
     val connectedMac: StateFlow<String?> = _connectedMac.asStateFlow()
 
+    // Estado on/off del Bluetooth del sistema del teléfono. Se muestra en la
+    // pantalla principal y se refresca al entrar y de forma periódica.
+    private val _bluetoothEnabled = MutableStateFlow(btManager.isBluetoothEnabled())
+    val bluetoothEnabled: StateFlow<Boolean> = _bluetoothEnabled.asStateFlow()
+
     // ---- Selección manual de Bluetooth (sin NFC) ----
     // Pantalla del selector de dispositivos Bluetooth emparejados visible.
     private val _btPickerVisible = MutableStateFlow(false)
@@ -435,6 +440,11 @@ class MainViewModel(
     /** Cierra el selector de Bluetooth. */
     fun hideBluetoothPicker() {
         _btPickerVisible.value = false
+    }
+
+    /** Actualiza el estado on/off del Bluetooth del sistema (para la UI). */
+    fun refreshBluetoothState() {
+        _bluetoothEnabled.value = btManager.isBluetoothEnabled()
     }
 
     /** Recarga la lista de dispositivos BT emparejados (botón de refrescar). */

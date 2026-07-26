@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Foreground del icono adaptativo: coloca el logo circular Tap2Sound centrado
-    y a ~66% del lienzo (72dp de 108dp) para que quede dentro de la zona segura
-    y no lo recorte la máscara circular del launcher.
+    Foreground del icono adaptativo.
+    - 1ª capa: base blanca a TODO el lienzo (108dp). Al ser opaca de borde a
+      borde, los launchers con "zoom to fill" (ColorOS/OPPO, etc.) no amplían
+      el logo recortándolo.
+    - 2ª capa: el logo circular Tap2Sound con 20dp de margen por lado, así queda
+      centrado y dentro de la máscara del launcher sin que se corten el texto
+      "Tap2Sound" ni la mano.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ic_launcher_background" />
     <item
-        android:gravity="center"
-        android:width="72dp"
-        android:height="72dp"
+        android:left="20dp"
+        android:top="20dp"
+        android:right="20dp"
+        android:bottom="20dp"
         android:drawable="@drawable/logo_tap2sound" />
 </layer-list>

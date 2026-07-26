@@ -1,5 +1,7 @@
 package com.speakerroom.tap2sound.ui
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,14 +28,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.speakerroom.tap2sound.R
 import com.speakerroom.tap2sound.data.Speaker
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +47,8 @@ fun SpeakersScreen(
     tapState: TapState,
     isAdmin: Boolean,
     connectedMac: String?,
+    bluetoothEnabled: Boolean,
+    onRefreshBluetoothState: () -> Unit,
     onAddSpeaker: () -> Unit,
     onOpenAdmin: () -> Unit,
     onOpenBtPicker: () -> Unit,
@@ -51,6 +58,16 @@ fun SpeakersScreen(
     onReplayVerification: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val context = LocalContext.current
+
+    // Sondea el estado del Bluetooth del sistema cada 2,5 s para mantenerlo al día.
+    LaunchedEffect(Unit) {
+        while (true) {
+            onRefreshBluetoothState()
+            delay(2500)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -92,6 +109,16 @@ fun SpeakersScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
+            // Estado del Bluetooth del sistema (activado / desactivado)
+            BluetoothStatusCard(
+                enabled = bluetoothEnabled,
+                onOpenSettings = {
+                    context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             // Banner de estado del tap
             TapStatusBanner(
                 tapState = tapState,
@@ -140,6 +167,39 @@ fun SpeakersScreen(
                             onClick = { onConnectSpeaker(speaker) }
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BluetoothStatusCard(enabled: Boolean, onOpenSettings: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (enabled) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.errorContainer
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (enabled) "🔵 Bluetooth activado" else "⚠️ Bluetooth desactivado",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold
+            )
+            if (!enabled) {
+                TextButton(onClick = onOpenSettings) {
+                    Text("Activar")
                 }
             }
         }

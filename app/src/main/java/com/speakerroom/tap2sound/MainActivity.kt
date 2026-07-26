@@ -168,6 +168,7 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
     val connectedMac by viewModel.connectedMac.collectAsState()
     val btPickerVisible by viewModel.btPickerVisible.collectAsState()
     val btDevices by viewModel.btDevices.collectAsState()
+    val bluetoothEnabled by viewModel.bluetoothEnabled.collectAsState()
 
     when (authState) {
         is AuthState.Loading,
@@ -220,6 +221,8 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
                         tapState = tapState,
                         isAdmin = isAdmin,
                         connectedMac = connectedMac,
+                        bluetoothEnabled = bluetoothEnabled,
+                        onRefreshBluetoothState = viewModel::refreshBluetoothState,
                         onAddSpeaker = viewModel::startOnboarding,
                         onOpenAdmin = viewModel::showAdminScreen,
                         onOpenBtPicker = viewModel::showBluetoothPicker,
