@@ -12,8 +12,8 @@ android {
         applicationId = "com.speakerroom.tap2sound"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 5
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -77,6 +77,9 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
 
     // NFC & Bluetooth
+
+    // Google Play In-App Review API
+    implementation("com.google.android.play:review-ktx:2.0.1")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

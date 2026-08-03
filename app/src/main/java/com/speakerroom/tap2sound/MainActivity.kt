@@ -1,6 +1,9 @@
 package com.speakerroom.tap2sound
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.nfc.NfcAdapter
@@ -27,11 +30,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import com.google.android.play.core.review.ReviewManagerFactory
 import com.speakerroom.tap2sound.ui.TapState
 import com.speakerroom.tap2sound.nfc.NfcHelper
 import com.speakerroom.tap2sound.ui.AuthScreen
@@ -41,6 +46,8 @@ import com.speakerroom.tap2sound.ui.AdminScreen
 import com.speakerroom.tap2sound.ui.AuthState
 import com.speakerroom.tap2sound.ui.MainViewModel
 import com.speakerroom.tap2sound.ui.MainViewModelFactory
+import com.speakerroom.tap2sound.ui.PrivacyPolicyScreen
+import com.speakerroom.tap2sound.ui.SettingsScreen
 import com.speakerroom.tap2sound.ui.SpeakersScreen
 import com.speakerroom.tap2sound.ui.Tap2SoundTheme
 
@@ -70,7 +77,8 @@ class MainActivity : ComponentActivity() {
         requestBluetoothPermissions()
 
         setContent {
-            Tap2SoundTheme {
+            val useLightTheme by viewModel.useLightTheme.collectAsState()
+            Tap2SoundTheme(darkTheme = !useLightTheme) {
                 AppRoot(viewModel, onMinimize = { moveTaskToBack(true) })
             }
         }
@@ -169,6 +177,29 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
     val btPickerVisible by viewModel.btPickerVisible.collectAsState()
     val btDevices by viewModel.btDevices.collectAsState()
     val bluetoothEnabled by viewModel.bluetoothEnabled.collectAsState()
+    val forgotPasswordState by viewModel.forgotPasswordState.collectAsState()
+    val settingsScreenVisible by viewModel.settingsScreenVisible.collectAsState()
+    val privacyPolicyVisible by viewModel.privacyPolicyVisible.collectAsState()
+    val useLightTheme by viewModel.useLightTheme.collectAsState()
+    val deleteAccountState by viewModel.deleteAccountState.collectAsState()
+
+    // Suggestion 5 (QA report): pide una reseña oficial de Play Store tras
+    // interacciones positivas (conexiones exitosas), usando la API In-App Review.
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.reviewRequestEvent.collect {
+            val activity = context.findActivity()
+            if (activity != null) {
+                val reviewManager = ReviewManagerFactory.create(activity)
+                val request = reviewManager.requestReviewFlow()
+                request.addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        reviewManager.launchReviewFlow(activity, task.result)
+                    }
+                }
+            }
+        }
+    }
 
     when (authState) {
         is AuthState.Loading,
@@ -178,12 +209,29 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
                 errorMessage = authError,
                 initialEmail = savedEmail ?: "",
                 initialPassword = savedPassword ?: "",
+                forgotPasswordState = forgotPasswordState,
                 onLogin = viewModel::login,
-                onRegister = viewModel::register
+                onRegister = viewModel::register,
+                onForgotPassword = viewModel::forgotPassword,
+                onDismissForgotPasswordResult = viewModel::resetForgotPasswordState
             )
         }
         is AuthState.LoggedIn -> {
             when {
+                settingsScreenVisible -> {
+                    SettingsScreen(
+                        userEmail = savedEmail,
+                        useLightTheme = useLightTheme,
+                        deleteAccountState = deleteAccountState,
+                        onToggleTheme = viewModel::setUseLightTheme,
+                        onOpenPrivacyPolicy = viewModel::showPrivacyPolicy,
+                        onDeleteAccount = viewModel::deleteAccount,
+                        onBack = viewModel::hideSettings
+                    )
+                }
+                privacyPolicyVisible -> {
+                    PrivacyPolicyScreen(onBack = viewModel::hidePrivacyPolicy)
+                }
                 btPickerVisible -> {
                     BluetoothPickerScreen(
                         devices = btDevices,
@@ -226,6 +274,7 @@ private fun AppRoot(viewModel: MainViewModel, onMinimize: () -> Unit) {
                         onAddSpeaker = viewModel::startOnboarding,
                         onOpenAdmin = viewModel::showAdminScreen,
                         onOpenBtPicker = viewModel::showBluetoothPicker,
+                        onOpenSettings = viewModel::showSettings,
                         onConnectSpeaker = viewModel::connectSpeakerManually,
                         onConfirmSpeaker = viewModel::confirmSpeaker,
                         onRejectSpeaker = viewModel::rejectSpeaker,
@@ -281,4 +330,14 @@ private fun ConnectingDialog() {
             }
         }
     }
+}
+
+/** Recorre la cadena de ContextWrapper hasta encontrar la Activity (para el In-App Review API). */
+private fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
 }

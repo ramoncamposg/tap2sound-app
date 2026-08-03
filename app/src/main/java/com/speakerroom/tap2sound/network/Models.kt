@@ -73,6 +73,22 @@ data class TagStatusResponse(
     val paired: Boolean = false
 )
 
+// Forgot password
+data class ForgotPasswordRequest(
+    val email: String
+)
+
+// Account deletion
+data class DeleteAccountResponse(
+    val success: Boolean = true
+)
+
+// Generic message response (forgot password, etc.)
+data class MessageResponse(
+    val success: Boolean = true,
+    val message: String? = null
+)
+
 // Error responses
 data class ErrorResponse(
     val error: String

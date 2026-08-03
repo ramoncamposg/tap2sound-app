@@ -22,6 +22,22 @@ class Tap2SoundRepository(
     val userEmail: Flow<String?> = userPrefs.userEmail
     val userPassword: Flow<String?> = userPrefs.userPassword
     val isAdmin: Flow<Boolean> = userPrefs.isAdmin
+    val useLightTheme: Flow<Boolean> = userPrefs.useLightTheme
+    val reviewRequested: Flow<Boolean> = userPrefs.reviewRequested
+
+    suspend fun setUseLightTheme(useLight: Boolean) = userPrefs.setUseLightTheme(useLight)
+
+    /** Registra una conexión exitosa; devuelve true si es momento de pedir review. */
+    suspend fun registerSuccessfulConnectionAndCheckReview(): Boolean {
+        val count = userPrefs.incrementSuccessfulConnections()
+        val alreadyRequested = userPrefs.reviewRequested.first()
+        return if (!alreadyRequested && count >= 3) {
+            userPrefs.markReviewRequested()
+            true
+        } else {
+            false
+        }
+    }
 
     // ---------- AUTH ----------
 
@@ -63,6 +79,33 @@ class Tap2SoundRepository(
     }
 
     suspend fun isLoggedIn(): Boolean = userPrefs.jwtToken.first() != null
+
+    /** Solicita el email de restablecimiento de contraseña. */
+    suspend fun forgotPassword(email: String): Result<String> {
+        return when (val result = apiClient.forgotPassword(email)) {
+            is ApiResult.Success -> Result.success(
+                result.data.message
+                    ?: "If that email is registered, you'll receive reset instructions shortly."
+            )
+            is ApiResult.Error -> Result.failure(Exception(result.message))
+        }
+    }
+
+    /** Elimina la cuenta del usuario autenticado y limpia todos los datos locales. */
+    suspend fun deleteAccount(): Result<Unit> {
+        val token = userPrefs.jwtToken.first()
+            ?: return Result.failure(Exception("Not authenticated"))
+
+        return when (val result = apiClient.deleteAccount(token)) {
+            is ApiResult.Success -> {
+                userPrefs.clearUserData()
+                userPrefs.clearSavedCredentials()
+                speakerDao.deleteAll()
+                Result.success(Unit)
+            }
+            is ApiResult.Error -> Result.failure(Exception(result.message))
+        }
+    }
 
     /** true/false si el tag esta en la lista blanca; null si no se pudo comprobar. */
     suspend fun isTagRegistered(nfcUid: String): Boolean? {

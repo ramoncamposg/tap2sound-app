@@ -36,6 +36,14 @@ class ApiClient(private val baseUrl: String) {
     suspend fun login(email: String, password: String): ApiResult<AuthResponse> =
         post("/auth/login", LoginRequest(email, password), AuthResponse::class.java)
 
+    /** Solicita el envío de un enlace/código de restablecimiento de contraseña por email. */
+    suspend fun forgotPassword(email: String): ApiResult<MessageResponse> =
+        post("/auth/forgot-password", ForgotPasswordRequest(email), MessageResponse::class.java)
+
+    /** Elimina la cuenta del usuario autenticado (irreversible). */
+    suspend fun deleteAccount(token: String): ApiResult<DeleteAccountResponse> =
+        delete("/auth/account", DeleteAccountResponse::class.java, token)
+
     // ---------- SPEAKERS ----------
 
     /**
@@ -129,6 +137,25 @@ class ApiClient(private val baseUrl: String) {
         }
     }
 
+    private suspend fun <T> delete(
+        path: String,
+        responseClass: Class<T>,
+        token: String? = null
+    ): ApiResult<T> = withContext(Dispatchers.IO) {
+        try {
+            val requestBuilder = Request.Builder()
+                .url("$baseUrl$path")
+                .delete()
+            token?.let { requestBuilder.addHeader("Authorization", "Bearer $it") }
+
+            client.newCall(requestBuilder.build()).execute().use { response ->
+                parseResponse(response, responseClass)
+            }
+        } catch (e: Exception) {
+            ApiResult.Error(e.message ?: "Network error")
+        }
+    }
+
     private suspend fun <T> get(
         path: String,
         responseClass: Class<T>,
@@ -155,7 +182,11 @@ class ApiClient(private val baseUrl: String) {
         val responseBody = response.body?.string() ?: ""
         return if (response.isSuccessful) {
             try {
-                ApiResult.Success(gson.fromJson(responseBody, responseClass))
+                // Algunos endpoints (p. ej. DELETE) pueden devolver un cuerpo vacío
+                // en caso de éxito; usamos "{}" para que Gson use los valores por
+                // defecto del data class en vez de fallar al parsear.
+                val bodyToParse = responseBody.ifBlank { "{}" }
+                ApiResult.Success(gson.fromJson(bodyToParse, responseClass))
             } catch (e: Exception) {
                 ApiResult.Error("Failed to parse response: ${e.message}")
             }

@@ -55,6 +55,14 @@ sealed class WriteState {
     data class Error(val message: String) : WriteState()
 }
 
+/** Estado del flujo de borrado de cuenta desde Ajustes. */
+sealed class DeleteAccountState {
+    object Idle : DeleteAccountState()
+    object Loading : DeleteAccountState()
+    object Deleted : DeleteAccountState()
+    data class Error(val message: String) : DeleteAccountState()
+}
+
 class MainViewModel(
     private val repository: Tap2SoundRepository,
     private val btManager: BtManager,
@@ -69,6 +77,26 @@ class MainViewModel(
 
     private val _authError = MutableStateFlow<String?>(null)
     val authError: StateFlow<String?> = _authError.asStateFlow()
+
+    private val _forgotPasswordState = MutableStateFlow<ForgotPasswordState>(ForgotPasswordState.Idle)
+    val forgotPasswordState: StateFlow<ForgotPasswordState> = _forgotPasswordState.asStateFlow()
+
+    // ---- Ajustes (tema, privacidad, borrado de cuenta) ----
+    private val _settingsScreenVisible = MutableStateFlow(false)
+    val settingsScreenVisible: StateFlow<Boolean> = _settingsScreenVisible.asStateFlow()
+
+    private val _privacyPolicyVisible = MutableStateFlow(false)
+    val privacyPolicyVisible: StateFlow<Boolean> = _privacyPolicyVisible.asStateFlow()
+
+    private val _deleteAccountState = MutableStateFlow<DeleteAccountState>(DeleteAccountState.Idle)
+    val deleteAccountState: StateFlow<DeleteAccountState> = _deleteAccountState.asStateFlow()
+
+    val useLightTheme: StateFlow<Boolean> = repository.useLightTheme
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    // Evento de un solo disparo: pedir al usuario que valore la app (In-App Review API).
+    private val _reviewRequestEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val reviewRequestEvent: SharedFlow<Unit> = _reviewRequestEvent.asSharedFlow()
 
     // Onboarding guiado (paso 1: conectar BT, paso 2: tocar NFC)
     private val _onboardingActive = MutableStateFlow(false)
@@ -262,6 +290,91 @@ class MainViewModel(
         }
     }
 
+    /** Solicita el envío de instrucciones de restablecimiento de contraseña. */
+    fun forgotPassword(email: String) {
+        if (email.isBlank()) return
+        viewModelScope.launch {
+            _forgotPasswordState.value = ForgotPasswordState.Loading
+            repository.forgotPassword(email)
+                .onSuccess { message ->
+                    _forgotPasswordState.value = ForgotPasswordState.Success(message)
+                }
+                .onFailure {
+                    _forgotPasswordState.value = ForgotPasswordState.Error(
+                        it.message ?: "Couldn't send the reset email. Try again later."
+                    )
+                }
+        }
+    }
+
+    fun resetForgotPasswordState() {
+        _forgotPasswordState.value = ForgotPasswordState.Idle
+    }
+
+    // ---------- AJUSTES ----------
+
+    fun showSettings() {
+        _settingsScreenVisible.value = true
+    }
+
+    fun hideSettings() {
+        _settingsScreenVisible.value = false
+        _deleteAccountState.value = DeleteAccountState.Idle
+    }
+
+    fun showPrivacyPolicy() {
+        _privacyPolicyVisible.value = true
+    }
+
+    fun hidePrivacyPolicy() {
+        _privacyPolicyVisible.value = false
+    }
+
+    fun setUseLightTheme(useLight: Boolean) {
+        viewModelScope.launch {
+            repository.setUseLightTheme(useLight)
+        }
+    }
+
+    /** Elimina la cuenta del usuario de forma permanente. */
+    fun deleteAccount() {
+        viewModelScope.launch {
+            _deleteAccountState.value = DeleteAccountState.Loading
+            repository.deleteAccount()
+                .onSuccess {
+                    _deleteAccountState.value = DeleteAccountState.Deleted
+                    appReady = false
+                    pendingTapUid = null
+                    minimizeJob?.cancel()
+                    _connectedMac.value = null
+                    _settingsScreenVisible.value = false
+                    _privacyPolicyVisible.value = false
+                    _adminScreenVisible.value = false
+                    _onboardingActive.value = false
+                    _tapState.value = TapState.Idle
+                    _authState.value = AuthState.LoggedOut
+                }
+                .onFailure {
+                    _deleteAccountState.value = DeleteAccountState.Error(
+                        it.message ?: "Couldn't delete the account. Try again later."
+                    )
+                }
+        }
+    }
+
+    /**
+     * Se llama tras cada conexión exitosa a un altavoz. A partir de la 2a
+     * conexión exitosa, dispara (una única vez) el flujo oficial de reseña
+     * en Play Store (In-App Review API).
+     */
+    private fun maybeRequestReview() {
+        viewModelScope.launch {
+            if (repository.registerSuccessfulConnectionAndCheckReview()) {
+                _reviewRequestEvent.tryEmit(Unit)
+            }
+        }
+    }
+
     fun logout() {
         viewModelScope.launch {
             repository.logout()
@@ -272,6 +385,10 @@ class MainViewModel(
             _adminScreenVisible.value = false
             _writeMode.value = false
             _onboardingActive.value = false
+            _settingsScreenVisible.value = false
+            _privacyPolicyVisible.value = false
+            _deleteAccountState.value = DeleteAccountState.Idle
+            _forgotPasswordState.value = ForgotPasswordState.Idle
             _tapState.value = TapState.Idle
             _authState.value = AuthState.LoggedOut
         }
@@ -314,6 +431,7 @@ class MainViewModel(
                     _connectedMac.value = cachedMac
                     _tapState.value = TapState.Connected("Speaker connected")
                     _onboardingActive.value = false
+                    maybeRequestReview()
                     // NO auto-minimizamos: si la app se va a segundo plano, el
                     // siguiente tap NFC choca con el bloqueo BAL de Android 15 y
                     // exige un segundo toque. Quedándonos en primer plano, el
@@ -374,6 +492,7 @@ class MainViewModel(
                     _connectedMac.value = mac
                     _tapState.value = TapState.Connected(speaker.name ?: "Speaker")
                     _onboardingActive.value = false
+                    maybeRequestReview()
                 }
                 .onFailure {
                     _tapState.value = TapState.Error(it.message ?: "Pairing error")
@@ -422,6 +541,7 @@ class MainViewModel(
                 _connectedMac.value = speaker.btMac
                 _tapState.value = TapState.Connected(speaker.name ?: "Speaker")
                 _onboardingActive.value = false
+                maybeRequestReview()
                 if (autoMinimizeEnabled) scheduleMinimize()
             } else {
                 _tapState.value = TapState.Error("Couldn't connect to the speaker")
@@ -475,6 +595,7 @@ class MainViewModel(
                 _tapState.value = TapState.Connected(device.name)
                 _btPickerVisible.value = false
                 _onboardingActive.value = false
+                maybeRequestReview()
                 if (autoMinimizeEnabled) scheduleMinimize()
             } else {
                 _tapState.value = TapState.Error("Couldn't connect to ${device.name}")

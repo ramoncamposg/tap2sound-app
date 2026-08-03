@@ -52,6 +52,7 @@ fun SpeakersScreen(
     onAddSpeaker: () -> Unit,
     onOpenAdmin: () -> Unit,
     onOpenBtPicker: () -> Unit,
+    onOpenSettings: () -> Unit,
     onConnectSpeaker: (Speaker) -> Unit,
     onConfirmSpeaker: () -> Unit,
     onRejectSpeaker: () -> Unit,
@@ -89,6 +90,7 @@ fun SpeakersScreen(
                     if (isAdmin) {
                         TextButton(onClick = onOpenAdmin) { Text("Admin") }
                     }
+                    TextButton(onClick = onOpenSettings) { Text("Settings") }
                     TextButton(onClick = onLogout) {
                         Text("Log out")
                     }
@@ -193,13 +195,13 @@ private fun BluetoothStatusCard(enabled: Boolean, onOpenSettings: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (enabled) "🔵 Bluetooth activado" else "⚠️ Bluetooth desactivado",
+                text = if (enabled) "🔵 Bluetooth is on" else "⚠️ Bluetooth is off",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold
             )
             if (!enabled) {
                 TextButton(onClick = onOpenSettings) {
-                    Text("Activar")
+                    Text("Turn on")
                 }
             }
         }
@@ -317,7 +319,7 @@ private fun SpeakerCard(speaker: Speaker, isConnected: Boolean, onClick: () -> U
                 )
                 if (isConnected) {
                     Text(
-                        text = "🔊 Conectado",
+                        text = "🔊 Connected",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onTertiaryContainer
