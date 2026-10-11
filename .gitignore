@@ -18,3 +18,4 @@ local.properties
 *.dex
 *.class
 /app/build
+*.aab
